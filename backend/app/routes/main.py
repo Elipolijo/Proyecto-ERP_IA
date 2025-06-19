@@ -21,3 +21,6 @@ def test_db():
     cursor.close()
    
     return jsonify({"base_de_datos_actual": db_actual, "tablas": tables})
+
+
+
