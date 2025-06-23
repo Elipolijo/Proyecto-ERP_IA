@@ -13,21 +13,22 @@ def listar_entradas():
         # Query con JOINs para obtener nombres de producto y proveedor
         query = """
             SELECT 
-                es.id_entrada,
-                es.id_producto,
+                es.id,
+                es.producto_id,
                 p.nombre as nombre_producto,
                 p.codigo as codigo_producto,
-                es.id_proveedor,
+                es.proveedor_id,
                 pr.nombre as nombre_proveedor,
+                es.usuario_id,
                 es.cantidad,
                 es.precio_compra,
-                es.fecha_entrada,
-                es.activo
+                es.precio_venta,
+                es.fecha 
             FROM entrada_stock es
             JOIN productos p ON es.id_producto = p.id_producto
             JOIN proveedores pr ON es.id_proveedor = pr.id_proveedor
-            WHERE es.activo = 1
-            ORDER BY es.fecha_entrada DESC
+            
+            ORDER BY es.fecha DESC
         """
         
         cursor.execute(query)
@@ -54,20 +55,21 @@ def obtener_entrada(id_entrada):
         
         query = """
             SELECT 
-                es.id_entrada,
-                es.id_producto,
+                es.id,
+                es.producto_id,
                 p.nombre as nombre_producto,
                 p.codigo as codigo_producto,
-                es.id_proveedor,
+                es.proveedor_id,
                 pr.nombre as nombre_proveedor,
+                es.usuario_id,
                 es.cantidad,
                 es.precio_compra,
-                es.fecha_entrada,
-                es.activo
+                es.precio_venta,
+                es.fecha
             FROM entrada_stock es
-            JOIN productos p ON es.id_producto = p.id_producto
-            JOIN proveedores pr ON es.id_proveedor = pr.id_proveedor
-            WHERE es.id_entrada = %s AND es.activo = 1
+            JOIN productos p ON es.producto_id = p.id_producto
+            JOIN proveedores pr ON es.proveedor_id = pr.id_proveedor
+            WHERE es.id_entrada = %s 
         """
         
         cursor.execute(query, (id_entrada,))
@@ -97,8 +99,8 @@ def crear_entrada():
     try:
         data = request.get_json()
         
-        # Validar campos requeridos
-        campos_requeridos = ['id_producto', 'id_proveedor', 'cantidad', 'precio_compra']
+        # Validar campos requeridos - NOMBRES CORREGIDOS
+        campos_requeridos = ['producto_id', 'proveedor_id', 'cantidad', 'precio_compra']
         for campo in campos_requeridos:
             if campo not in data or data[campo] is None:
                 return jsonify({
@@ -110,8 +112,15 @@ def crear_entrada():
         try:
             cantidad = int(data['cantidad'])
             precio_compra = float(data['precio_compra'])
-            id_producto = int(data['id_producto'])
-            id_proveedor = int(data['id_proveedor'])
+            producto_id = int(data['producto_id'])  # Corregido
+            proveedor_id = int(data['proveedor_id'])  # Corregido
+            
+            # Opcional: precio_venta si lo envías
+            precio_venta = float(data.get('precio_venta', 0))
+            
+            # Opcional: usuario_id si tienes autenticación
+            usuario_id = int(data.get('usuario_id', 1))  # Por defecto usuario 1
+            
         except (ValueError, TypeError):
             return jsonify({
                 'success': False,
@@ -132,43 +141,44 @@ def crear_entrada():
         
         cursor = mysql.connection.cursor()
         
-        # Verificar que el producto existe y está activo
-        cursor.execute("SELECT id_producto, stock FROM productos WHERE id_producto = %s AND activo = 1", 
-                      (id_producto,))
+        # Verificar que el producto existe
+        cursor.execute("SELECT id, stock_actual FROM productos WHERE id = %s",
+                       (producto_id,))
         producto = cursor.fetchone()
         
         if not producto:
             cursor.close()
             return jsonify({
                 'success': False,
-                'message': 'Producto no encontrado o inactivo'
+                'message': 'Producto no encontrado'
             }), 404
         
-        # Verificar que el proveedor existe y está activo
-        cursor.execute("SELECT id_proveedor FROM proveedores WHERE id_proveedor = %s AND activo = 1", 
-                      (id_proveedor,))
+        # Verificar que el proveedor existe (necesitamos ver estructura de proveedores)
+        cursor.execute("SELECT id FROM proveedores WHERE id = %s",
+                       (proveedor_id,))
         proveedor = cursor.fetchone()
         
         if not proveedor:
             cursor.close()
             return jsonify({
                 'success': False,
-                'message': 'Proveedor no encontrado o inactivo'
+                'message': 'Proveedor no encontrado'
             }), 404
         
-        # Insertar nueva entrada de stock
+        # Insertar nueva entrada de stock - COLUMNAS CORREGIDAS
         query_entrada = """
-            INSERT INTO entrada_stock (id_producto, id_proveedor, cantidad, precio_compra, fecha_entrada, activo)
-            VALUES (%s, %s, %s, %s, NOW(), 1)
+            INSERT INTO entrada_stock 
+            (producto_id, proveedor_id, usuario_id, cantidad, precio_compra, precio_venta, fecha)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
         """
         
-        cursor.execute(query_entrada, (id_producto, id_proveedor, cantidad, precio_compra))
+        cursor.execute(query_entrada, (producto_id, proveedor_id, usuario_id, cantidad, precio_compra, precio_venta))
         id_nueva_entrada = cursor.lastrowid
         
         # Actualizar stock del producto
-        nuevo_stock = producto['stock'] + cantidad
-        cursor.execute("UPDATE productos SET stock = %s WHERE id_producto = %s", 
-                      (nuevo_stock, id_producto))
+        nuevo_stock = producto['stock_actual'] + cantidad
+        cursor.execute("UPDATE productos SET stock_actual = %s WHERE id = %s",
+                       (nuevo_stock, producto_id))
         
         mysql.connection.commit()
         cursor.close()
@@ -178,7 +188,7 @@ def crear_entrada():
             'message': 'Entrada de stock registrada exitosamente',
             'data': {
                 'id_entrada': id_nueva_entrada,
-                'stock_anterior': producto['stock'],
+                'stock_anterior': producto['stock_actual'],
                 'stock_nuevo': nuevo_stock,
                 'cantidad_agregada': cantidad
             }
@@ -191,6 +201,7 @@ def crear_entrada():
             'message': f'Error al crear entrada de stock: {str(e)}'
         }), 500
 
+#-----------------TEST HASTA HERE 
 @entrada_stock_bp.route('/entradas-stock/<int:id_entrada>', methods=['PATCH'])
 def modificar_entrada(id_entrada):
     """Modificar entrada de stock existente y recalcular stock del producto"""
