@@ -40,7 +40,7 @@ def listar_categorias():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
     
- @categorias_bp.route('/categorias/<int:categoria_id>', methods=['GET'])
+@categorias_bp.route('/categorias/<int:categoria_id>', methods=['GET'])
 def obtener_categoria(categoria_id):
     """Obtener una categoría específica por ID"""
     try:
