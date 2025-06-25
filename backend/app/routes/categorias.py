@@ -3,16 +3,15 @@ from ..database import mysql
 
 categorias_bp = Blueprint('categorias', __name__)
 
-# Acá van a ir las rutas
+# Listar todas las categorías
 @categorias_bp.route('/categorias', methods=['GET'])
 def listar_categorias():
-    """Listar todas las categorías activas"""
+    """Listar todas las categorías"""
     try:
         cursor = mysql.connection.cursor()
         query = """
-        SELECT id, nombre, descripcion, activo, fecha_creacion, fecha_actualizacion
+        SELECT id, nombre, descripcion
         FROM categorias 
-        WHERE activo = 1
         ORDER BY nombre
         """
         cursor.execute(query)
@@ -25,10 +24,7 @@ def listar_categorias():
             categorias_list.append({
                 'id': categoria[0],
                 'nombre': categoria[1],
-                'descripcion': categoria[2],
-                'activo': bool(categoria[3]),
-                'fecha_creacion': categoria[4].isoformat() if categoria[4] else None,
-                'fecha_actualizacion': categoria[5].isoformat() if categoria[5] else None
+                'descripcion': categoria[2]
             })
         
         return jsonify({
@@ -39,16 +35,16 @@ def listar_categorias():
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
-    
+
 @categorias_bp.route('/categorias/<int:categoria_id>', methods=['GET'])
 def obtener_categoria(categoria_id):
     """Obtener una categoría específica por ID"""
     try:
         cursor = mysql.connection.cursor()
         query = """
-        SELECT id, nombre, descripcion, activo, fecha_creacion, fecha_actualizacion
+        SELECT id, nombre, descripcion
         FROM categorias 
-        WHERE id = %s AND activo = 1
+        WHERE id = %s
         """
         cursor.execute(query, (categoria_id,))
         categoria = cursor.fetchone()
@@ -63,10 +59,7 @@ def obtener_categoria(categoria_id):
         categoria_data = {
             'id': categoria[0],
             'nombre': categoria[1],
-            'descripcion': categoria[2],
-            'activo': bool(categoria[3]),
-            'fecha_creacion': categoria[4].isoformat() if categoria[4] else None,
-            'fecha_actualizacion': categoria[5].isoformat() if categoria[5] else None
+            'descripcion': categoria[2]
         }
         
         return jsonify({
@@ -76,7 +69,7 @@ def obtener_categoria(categoria_id):
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500   
-    
+
 @categorias_bp.route('/categorias', methods=['POST'])
 def crear_categoria():
     """Crear una nueva categoría"""
@@ -94,7 +87,7 @@ def crear_categoria():
         
         # Verificar que no exista una categoría con el mismo nombre
         cursor.execute(
-            "SELECT id FROM categorias WHERE nombre = %s AND activo = 1", 
+            "SELECT id FROM categorias WHERE nombre = %s", 
             (data['nombre'].strip(),)
         )
         if cursor.fetchone():
@@ -106,13 +99,12 @@ def crear_categoria():
         
         # Insertar nueva categoría
         query = """
-        INSERT INTO categorias (nombre, descripcion, activo)
-        VALUES (%s, %s, %s)
+        INSERT INTO categorias (nombre, descripcion)
+        VALUES (%s, %s)
         """
         valores = (
             data['nombre'].strip(),
-            data.get('descripcion', '').strip(),
-            True
+            data.get('descripcion', '').strip()
         )
         
         cursor.execute(query, valores)
@@ -125,10 +117,9 @@ def crear_categoria():
             'data': {'id': categoria_id},
             'message': 'Categoría creada exitosamente'
         }), 201
-        
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500 
-    
+
 @categorias_bp.route('/categorias/<int:categoria_id>', methods=['PATCH'])
 def actualizar_categoria_parcial(categoria_id):
     """Actualizar campos específicos de una categoría"""
@@ -144,7 +135,7 @@ def actualizar_categoria_parcial(categoria_id):
         cursor = mysql.connection.cursor()
         
         # Verificar que la categoría existe
-        cursor.execute("SELECT id FROM categorias WHERE id = %s AND activo = 1", (categoria_id,))
+        cursor.execute("SELECT id FROM categorias WHERE id = %s", (categoria_id,))
         if not cursor.fetchone():
             cursor.close()
             return jsonify({
@@ -155,7 +146,7 @@ def actualizar_categoria_parcial(categoria_id):
         # Verificar nombre duplicado si se está actualizando el nombre
         if 'nombre' in data and data['nombre'].strip():
             cursor.execute(
-                "SELECT id FROM categorias WHERE nombre = %s AND id != %s AND activo = 1", 
+                "SELECT id FROM categorias WHERE nombre = %s AND id != %s", 
                 (data['nombre'].strip(), categoria_id)
             )
             if cursor.fetchone():
@@ -190,10 +181,7 @@ def actualizar_categoria_parcial(categoria_id):
                 'error': 'No hay campos válidos para actualizar'
             }), 400
         
-        # Agregar fecha de actualización
-        campos_actualizar.append("fecha_actualizacion = NOW()")
         valores.append(categoria_id)
-        
         query = f"UPDATE categorias SET {', '.join(campos_actualizar)} WHERE id = %s"
         cursor.execute(query, valores)
         mysql.connection.commit()
@@ -203,51 +191,43 @@ def actualizar_categoria_parcial(categoria_id):
             'success': True,
             'message': 'Categoría actualizada exitosamente'
         })
-        
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500       
-    
+
 @categorias_bp.route('/categorias/<int:categoria_id>', methods=['DELETE'])
 def eliminar_categoria(categoria_id):
-    """Eliminar una categoría (soft delete)"""
+    """Eliminar una categoría"""
     try:
         cursor = mysql.connection.cursor()
-        
-        # Verificar que la categoría existe
-        cursor.execute("SELECT id FROM categorias WHERE id = %s AND activo = 1", (categoria_id,))
+        cursor.execute("SELECT id FROM categorias WHERE id = %s", (categoria_id,))
         if not cursor.fetchone():
             cursor.close()
             return jsonify({
                 'success': False, 
                 'error': 'Categoría no encontrada'
             }), 404
-        
         # Verificar si hay productos asociados a esta categoría
         cursor.execute(
-            "SELECT COUNT(*) FROM productos WHERE categoria_id = %s AND activo = 1", 
+            "SELECT COUNT(*) FROM productos WHERE categoria_id = %s", 
             (categoria_id,)
         )
         productos_count = cursor.fetchone()[0]
-        
         if productos_count > 0:
             cursor.close()
             return jsonify({
                 'success': False,
                 'error': f'No se puede eliminar la categoría porque tiene {productos_count} producto(s) asociado(s)'
             }), 400
-        
-        # Soft delete - marcar como inactiva
+        # Eliminación real
         cursor.execute(
-            "UPDATE categorias SET activo = 0, fecha_actualizacion = NOW() WHERE id = %s",
+            "DELETE FROM categorias WHERE id = %s",
             (categoria_id,)
         )
         mysql.connection.commit()
         cursor.close()
-        
         return jsonify({
             'success': True,
             'message': 'Categoría eliminada exitosamente'
         })
-        
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500    
+        return jsonify({'success': False, 'error': str(e)}), 500

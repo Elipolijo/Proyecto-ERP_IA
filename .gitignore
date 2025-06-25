@@ -1,0 +1,15 @@
+# .gitignore
+
+# Entorno virtual
+backend/.venv/
+
+# Archivos compilados de Python
+*.pyc
+__pycache__/
+
+# Configuraciones del editor
+.vscode/
+.idea/
+
+# Otros archivos innecesarios
+*.log

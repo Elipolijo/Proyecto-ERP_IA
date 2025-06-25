@@ -21,13 +21,13 @@ def crear_factura():
             }), 400
         
         # Validar campos requeridos
-        if 'id_cliente' not in data or 'productos' not in data:
+        if 'cliente_id' not in data or 'productos' not in data:
             return jsonify({
                 'success': False,
-                'message': 'Se requieren id_cliente y productos'
+                'message': 'Se requieren cliente_id y productos'
             }), 400
         
-        id_cliente = data['id_cliente']
+        cliente_id = data['cliente_id']
         productos = data['productos']
         
         if not productos or len(productos) == 0:
@@ -39,15 +39,15 @@ def crear_factura():
         cursor = mysql.connection.cursor()
         
         # 🔍 PASO 2: VALIDAR QUE CLIENTE EXISTE
-        cursor.execute("SELECT id_cliente, nombre FROM clientes WHERE id_cliente = %s AND activo = 1", 
-                      (id_cliente,))
+        cursor.execute("SELECT id, nombre FROM clientes WHERE id = %s", 
+                      (cliente_id,))
         cliente = cursor.fetchone()
         
         if not cliente:
             cursor.close()
             return jsonify({
                 'success': False,
-                'message': 'Cliente no encontrado o inactivo'
+                'message': 'Cliente no encontrado'
             }), 404
         
         # 📦 PASO 3: VALIDAR PRODUCTOS Y STOCK
@@ -56,7 +56,7 @@ def crear_factura():
         
         for idx, producto in enumerate(productos):
             # Validar campos del producto
-            campos_requeridos = ['id_producto', 'cantidad', 'precio_venta']
+            campos_requeridos = ['producto_id', 'cantidad', 'precio_unitario']
             for campo in campos_requeridos:
                 if campo not in producto:
                     cursor.close()
@@ -66,9 +66,9 @@ def crear_factura():
                     }), 400
             
             try:
-                id_producto = int(producto['id_producto'])
+                producto_id = int(producto['producto_id'])
                 cantidad = int(producto['cantidad'])
-                precio_venta = float(producto['precio_venta'])
+                precio_unitario = float(producto['precio_unitario'])
             except (ValueError, TypeError):
                 cursor.close()
                 return jsonify({
@@ -83,7 +83,7 @@ def crear_factura():
                     'message': f'Producto {idx + 1}: la cantidad debe ser mayor a 0'
                 }), 400
             
-            if precio_venta <= 0:
+            if precio_unitario <= 0:
                 cursor.close()
                 return jsonify({
                     'success': False,
@@ -91,11 +91,7 @@ def crear_factura():
                 }), 400
             
             # Verificar que el producto existe y hay stock suficiente
-            cursor.execute("""
-                SELECT id_producto, nombre, stock, precio_venta as precio_sugerido
-                FROM productos 
-                WHERE id_producto = %s AND activo = 1
-            """, (id_producto,))
+            cursor.execute("SELECT id, nombre, stock_actual FROM productos WHERE id = %s", (producto_id,))
             
             producto_bd = cursor.fetchone()
             
@@ -103,38 +99,38 @@ def crear_factura():
                 cursor.close()
                 return jsonify({
                     'success': False,
-                    'message': f'Producto con ID {id_producto} no encontrado o inactivo'
+                    'message': f'Producto con ID {producto_id} no encontrado'
                 }), 404
             
-            if producto_bd['stock'] < cantidad:
+            if producto_bd[2] < cantidad:
                 cursor.close()
                 return jsonify({
                     'success': False,
-                    'message': f'Stock insuficiente para {producto_bd["nombre"]}. Stock disponible: {producto_bd["stock"]}, solicitado: {cantidad}'
+                    'message': f'Stock insuficiente para {producto_bd[1]}. Stock disponible: {producto_bd[2]}, solicitado: {cantidad}'
                 }), 400
             
             # 💰 CALCULAR SUBTOTAL
-            subtotal = cantidad * precio_venta
+            subtotal = cantidad * precio_unitario
             total_factura += subtotal
             
             # Guardar producto validado
             productos_validados.append({
-                'id_producto': id_producto,
-                'nombre': producto_bd['nombre'],
+                'producto_id': producto_id,
+                'nombre': producto_bd[1],
                 'cantidad': cantidad,
-                'precio_venta': precio_venta,
+                'precio_unitario': precio_unitario,
                 'subtotal': subtotal,
-                'stock_actual': producto_bd['stock']
+                'stock_actual': producto_bd[2]
             })
         
         # 📝 PASO 4: CREAR FACTURA (tabla facturas)
         query_factura = """
-            INSERT INTO facturas (id_cliente, fecha, total, estado, activo)
-            VALUES (%s, NOW(), %s, 'pagada', 1)
+            INSERT INTO facturas (cliente_id, fecha, total)
+            VALUES (%s, NOW(), %s)
         """
         
-        cursor.execute(query_factura, (id_cliente, total_factura))
-        id_factura = cursor.lastrowid
+        cursor.execute(query_factura, (cliente_id, total_factura))
+        factura_id = cursor.lastrowid
         
         # 📋 PASO 5: CREAR DETALLES (tabla detalle_factura)
         stock_actualizado = []
@@ -142,32 +138,24 @@ def crear_factura():
         for producto in productos_validados:
             # Insertar detalle
             query_detalle = """
-                INSERT INTO detalle_factura (id_factura, id_producto, cantidad, precio_venta, subtotal)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO detalle_factura (factura_id, producto_id, cantidad, precio_unitario)
+                VALUES (%s, %s, %s, %s)
             """
             
             cursor.execute(query_detalle, (
-                id_factura,
-                producto['id_producto'],
+                factura_id,
+                producto['producto_id'],
                 producto['cantidad'],
-                producto['precio_venta'],
-                producto['subtotal']
+                producto['precio_unitario']
             ))
             
             # 📦 PASO 6: ACTUALIZAR STOCK
             nuevo_stock = producto['stock_actual'] - producto['cantidad']
             
-            cursor.execute("""
-                UPDATE productos 
-                SET stock = %s 
-                WHERE id_producto = %s
-            """, (nuevo_stock, producto['id_producto']))
+            cursor.execute("UPDATE productos SET stock_actual = %s WHERE id = %s", (nuevo_stock, producto['producto_id']))
             
              # 📊 NUEVO: REGISTRAR EN DEMANDA_HISTORICA (para IA)
-            cursor.execute("""
-                INSERT INTO demanda_historica (producto_id, fecha, cantidad_vendida)
-                VALUES (%s, NOW(), %s)
-            """, (producto['id_producto'], producto['cantidad']))
+            cursor.execute("INSERT INTO demanda_historica (producto_id, fecha, cantidad_vendida) VALUES (%s, NOW(), %s)", (producto['producto_id'], producto['cantidad']))
             
             stock_actualizado.append({
                 'producto': producto['nombre'],
@@ -185,8 +173,8 @@ def crear_factura():
             'success': True,
             'message': 'Factura creada exitosamente',
             'data': {
-                'id_factura': id_factura,
-                'cliente': cliente['nombre'],
+                'factura_id': factura_id,
+                'cliente': cliente[1],
                 'total': total_factura,
                 'productos_vendidos': len(productos_validados),
                 'fecha': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -212,19 +200,14 @@ def listar_facturas():
         # 🔍 CONSULTAR FACTURAS CON DATOS DEL CLIENTE
         query = """
             SELECT 
-                f.id_factura,
-                f.id_cliente,
+                f.id,
+                f.cliente_id,
                 c.nombre as nombre_cliente,
                 c.email as email_cliente,
                 f.fecha,
-                f.total,
-                f.estado,
-                COUNT(df.id_detalle) as cantidad_productos
+                f.total
             FROM facturas f
-            JOIN clientes c ON f.id_cliente = c.id_cliente
-            LEFT JOIN detalle_factura df ON f.id_factura = df.id_factura
-            WHERE f.activo = 1
-            GROUP BY f.id_factura
+            JOIN clientes c ON f.cliente_id = c.id
             ORDER BY f.fecha DESC
         """
         
@@ -233,7 +216,7 @@ def listar_facturas():
         cursor.close()
         
         # 📊 ESTADÍSTICAS ADICIONALES
-        total_vendido = sum(factura['total'] for factura in facturas)
+        total_vendido = sum(factura[5] for factura in facturas)
         
         return jsonify({
             'success': True,
@@ -251,8 +234,8 @@ def listar_facturas():
             'message': f'Error al obtener facturas: {str(e)}'
         }), 500
 
-@facturas_bp.route('/facturas/<int:id_factura>', methods=['GET'])
-def ver_factura(id_factura):
+@facturas_bp.route('/facturas/<int:factura_id>', methods=['GET'])
+def ver_factura(factura_id):
     """
     CAMINITO: Buscar factura → Traer detalles de productos → Responder factura completa
     """
@@ -262,21 +245,19 @@ def ver_factura(id_factura):
         # 🔍 PASO 1: BUSCAR FACTURA CON DATOS DEL CLIENTE
         query_factura = """
             SELECT 
-                f.id_factura,
-                f.id_cliente,
+                f.id,
+                f.cliente_id,
                 c.nombre as nombre_cliente,
                 c.email as email_cliente,
                 c.telefono as telefono_cliente,
-                c.direccion as direccion_cliente,
                 f.fecha,
-                f.total,
-                f.estado
+                f.total
             FROM facturas f
-            JOIN clientes c ON f.id_cliente = c.id_cliente
-            WHERE f.id_factura = %s AND f.activo = 1
+            JOIN clientes c ON f.cliente_id = c.id
+            WHERE f.id = %s
         """
         
-        cursor.execute(query_factura, (id_factura,))
+        cursor.execute(query_factura, (factura_id,))
         factura = cursor.fetchone()
         
         if not factura:
@@ -289,25 +270,23 @@ def ver_factura(id_factura):
         # 📋 PASO 2: TRAER DETALLES DE PRODUCTOS
         query_detalles = """
             SELECT 
-                df.id_detalle,
-                df.id_producto,
+                df.id,
+                df.producto_id,
                 p.nombre as nombre_producto,
-                p.codigo as codigo_producto,
                 df.cantidad,
-                df.precio_venta,
-                df.subtotal
+                df.precio_unitario
             FROM detalle_factura df
-            JOIN productos p ON df.id_producto = p.id_producto
-            WHERE df.id_factura = %s
-            ORDER BY df.id_detalle
+            JOIN productos p ON df.producto_id = p.id
+            WHERE df.factura_id = %s
+            ORDER BY df.id
         """
         
-        cursor.execute(query_detalles, (id_factura,))
+        cursor.execute(query_detalles, (factura_id,))
         detalles = cursor.fetchall()
         cursor.close()
         
         # 📊 CALCULAR ESTADÍSTICAS
-        total_productos = sum(detalle['cantidad'] for detalle in detalles)
+        total_productos = sum(detalle[3] for detalle in detalles)
         
         # ✅ PASO 3: RESPONDER FACTURA COMPLETA
         return jsonify({
@@ -318,7 +297,7 @@ def ver_factura(id_factura):
                 'resumen': {
                     'total_productos': total_productos,
                     'total_lineas': len(detalles),
-                    'total_factura': factura['total']
+                    'total_factura': factura[6]
                 }
             }
         }), 200

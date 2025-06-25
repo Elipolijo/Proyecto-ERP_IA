@@ -1,0 +1,3 @@
+# Si existía importación o registro de prediccion_stock, ha sido eliminado.
+
+# Resto del código...

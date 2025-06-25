@@ -2,6 +2,7 @@
 
 #--> Aquí se van importante las ruta 
 from flask import Flask
+from flask_cors import CORS
 from .database import mysql
 
 def create_app():
@@ -15,6 +16,7 @@ def create_app():
 
     # Inicializar extensión MySQL
     mysql.init_app(app)
+    CORS(app)
 
     from .routes.main import main_bp
     from .routes.productos import productos_bp
@@ -24,6 +26,7 @@ def create_app():
     from .routes.entrada_stock import entrada_stock_bp
     from .routes.facturas import facturas_bp
     from app.routes.reportes import reportes_bp
+    from .routes.auth import auth_bp
 
 
 
@@ -36,6 +39,6 @@ def create_app():
     app.register_blueprint(entrada_stock_bp)    # Configuración adicional
     app.register_blueprint(facturas_bp) 
     app.register_blueprint(reportes_bp)# Configuración adicional
-    
+    app.register_blueprint(auth_bp)
 
     return app
