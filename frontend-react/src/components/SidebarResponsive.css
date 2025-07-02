@@ -1,0 +1,12 @@
+.sidebar-responsive {
+  transition: all 0.3s;
+  overflow: hidden;
+  background: #fff;
+  min-height: 100vh;
+}
+.sidebar-open {
+  width: 16rem; /* w-64 */
+}
+.sidebar-closed {
+  width: 4rem; /* w-16 */
+}

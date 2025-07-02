@@ -27,7 +27,8 @@ def listar_entradas():
             ORDER BY es.fecha DESC
         """
         cursor.execute(query)
-        entradas = cursor.fetchall()
+        columnas = [col[0] for col in cursor.description]
+        entradas = [dict(zip(columnas, fila)) for fila in cursor.fetchall()]
         cursor.close()
         return jsonify({
             'success': True,
