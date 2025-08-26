@@ -1,15 +1,18 @@
-# .gitignore
+# Node.js
+node_modules/
+frontend-react/node_modules/
+frontend-react/node_modules/.cache/
 
-# Entorno virtual
+# Python virtual env
 backend/.venv/
 
-# Archivos compilados de Python
+# Python compiled files
 *.pyc
 __pycache__/
 
-# Configuraciones del editor
+# Editor configs
 .vscode/
 .idea/
 
-# Otros archivos innecesarios
+# Logs
 *.log

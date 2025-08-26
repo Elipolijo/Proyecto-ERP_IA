@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Box, List, ListItem, ListItemText, Typography, Collapse, Divider } from '@mui/material';
 import { Link, useLocation } from 'react-router-dom';
 import COLORS from '../theme/colors';
@@ -61,7 +61,7 @@ const sidebarStructure = [
 
 function Sidebar() {
 	const location = useLocation();
-	const [openSections, setOpenSections] = useState({});
+	const [openSections, setOpenSections] = React.useState({});
 
 	const handleToggle = (section) => {
 		setOpenSections((prev) => {
@@ -90,7 +90,14 @@ function Sidebar() {
 			}}
 			onMouseLeave={handleSidebarMouseLeave}
 		>
-			<Box sx={{ width: '100%', p: 3, pb: 1, borderBottom: `1.5px solid ${COLORS.verdeSuave}` }} />
+			<Box sx={{ width: '100%', p: 3, pb: 1, borderBottom: `1.5px solid ${COLORS.verdeSuave}` }}>
+				<Typography variant="h5" fontWeight="bold" color={COLORS.verdeOscuro} letterSpacing={2} fontFamily="monospace">
+					POLIX.AI
+				</Typography>
+				<Typography variant="subtitle2" color={COLORS.verdeBrillante} fontWeight="bold" mt={0.5}>
+					Inventory
+				</Typography>
+			</Box>
 			<List sx={{ width: '100%', mt: 2 }}>
 				{sidebarStructure.map((section, idx) => (
 					<Box key={section.section} sx={{ width: '100%' }}>
@@ -113,10 +120,9 @@ function Sidebar() {
 								},
 							}}
 						>
-							<span style={{ marginRight: 8, fontSize: 16 }}>{section.emoji}</span>
-							<ListItemText primary={section.section} primaryTypographyProps={{ fontSize: 14 }} />
+							<ListItemText primary={`${section.emoji} ${section.section}`} />
 						</ListItem>
-						{section.collapsible ? (
+						{section.collapsible && (
 							<Collapse in={!!openSections[section.section]} timeout="auto" unmountOnExit>
 								<List component="div" disablePadding>
 									{section.items.map((item) => (
@@ -125,26 +131,23 @@ function Sidebar() {
 											key={item.text}
 											component={Link}
 											to={item.path}
-											selected={location.pathname === item.path}
 											sx={{
-												color: location.pathname === item.path ? COLORS.verdeOscuro : COLORS.grisOscuro,
+												pl: 6,
+												color: location.pathname === item.path ? COLORS.verdeBrillante : COLORS.verdeOscuro,
+												fontWeight: location.pathname === item.path ? 'bold' : 'normal',
 												bgcolor: location.pathname === item.path ? COLORS.verdeSuave : 'transparent',
-												borderLeft: location.pathname === item.path ? `4px solid ${COLORS.verdeBrillante}` : '4px solid transparent',
-												pl: 5,
-												fontSize: 13,
 												'&:hover': {
 													bgcolor: COLORS.verdeSuave,
-													color: COLORS.verdeOscuro,
 												},
 											}}
 										>
-											<ListItemText primary={item.text} primaryTypographyProps={{ fontSize: 13 }} />
+											<ListItemText primary={item.text} />
 										</ListItem>
 									))}
 								</List>
 							</Collapse>
-						) : null}
-						{idx < sidebarStructure.length - 1 && <Divider sx={{ my: 1, bgcolor: COLORS.verdeSuave }} />}
+						)}
+						{idx < sidebarStructure.length - 1 && <Divider sx={{ my: 1 }} />}
 					</Box>
 				))}
 			</List>

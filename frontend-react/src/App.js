@@ -7,7 +7,7 @@ import ClientesPage from './pages/ClientesPage';
 import DashboardPage from './pages/DashboardPage';
 import EntradaStockPage from './pages/EntradaStockPage';
 import Navbar from './components/Navbar';
-import SidebarResponsive from './components/SidebarResponsive';
+import Sidebar from './components/Sidebar';
 import COLORS from './theme/colors';
 import ProveedoresPage from './pages/ProveedoresPage';
 import FacturasPage from './pages/FacturasPage';
@@ -31,7 +31,7 @@ function App() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: COLORS.grisClaro }}>
-      {showSidebar && <SidebarResponsive />}
+      {showSidebar && <Sidebar />}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         {isAuthenticated && <Navbar setIsAuthenticated={setIsAuthenticated} />}
         <Routes>
